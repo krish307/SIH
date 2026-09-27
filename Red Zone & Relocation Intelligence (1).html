@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Red Zone & Relocation Intelligence</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef2f7;--card:#fff;--ink:#12213b;--mute:#5b6b85;--navy:#0B2A5B;--line:#d9e1ec;--red:#d62d2d;--org:#ee8a1c;--grn:#2e9b4f;--blu:#2b7bd0;--pur:#7a4fc4;--brn:#8a5a2b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1420;--card:#16202f;--ink:#e8eef8;--mute:#93a3bd;--line:#26344a}}
+:root[data-theme="dark"]{--bg:#0d1420;--card:#16202f;--ink:#e8eef8;--mute:#93a3bd;--line:#26344a}
+*,*:before,*:after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+header{background:var(--navy);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px}
+header h1{font-size:16px;margin:0;font-weight:650;flex:1}
+button{font:inherit;cursor:pointer}
+.hb{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:8px;padding:6px 10px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px 16px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.kpi b{display:block;font-size:20px}.kpi span{color:var(--mute);font-size:12px}
+main{flex:1;position:relative;margin:10px 16px 16px;border-radius:12px;overflow:hidden;border:1px solid var(--line);min-height:0}
+svg#map{width:100%;height:100%;display:block;background:#7c9d68}
+.panel{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+#layers{left:12px;top:12px;width:190px;padding:10px 12px}
+#layers h3,#detail h3,#plist h3{margin:0 0 6px;font-size:13px}
+#layers label{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}
+.dot{width:10px;height:10px;border-radius:50%}
+.legend{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--mute)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 0}
+#detail{right:12px;top:12px;width:290px;padding:14px;display:none;max-height:calc(100% - 90px);overflow:auto}
+#detail.on{display:block}
+.close{position:absolute;right:10px;top:8px;background:none;border:0;color:var(--mute);font-size:18px}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;color:#fff;font-size:12px;font-weight:600}
+.bar{height:7px;background:var(--line);border-radius:4px;margin:2px 0 8px;overflow:hidden}.bar i{display:block;height:100%;background:var(--org);width:0;transition:width .8s}
+.row{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}
+.btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 12px;width:100%;margin-top:6px}
+.btn.alt{background:none;color:var(--navy);border:1px solid var(--navy)}
+:root[data-theme="dark"] .btn.alt,:root:not([data-theme="light"]) .btn.alt{color:var(--ink);border-color:var(--mute)}
+#plist{left:50%;bottom:12px;transform:translateX(-50%);width:min(520px,calc(100% - 24px));padding:12px;display:none}
+#plist.on{display:block}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);font-size:13px}
+tr.v{cursor:pointer}tr.v:hover{background:var(--bg)}
+#banner{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--grn);color:#fff;padding:8px 14px;border-radius:99px;display:none;font-weight:600;white-space:nowrap}
+#fab{position:fixed;right:calc(20px + env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));width:60px;height:60px;border-radius:50%;background:var(--blu);border:0;color:#fff;box-shadow:0 6px 20px rgba(43,123,208,.55);z-index:20;display:grid;place-items:center;animation:pulse 2.4s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 12px rgba(43,123,208,0)}}
+@media (prefers-reduced-motion:reduce){#fab{animation:none}}
+#chat{position:fixed;right:20px;bottom:96px;width:340px;max-width:calc(100% - 24px);height:420px;max-height:calc(100% - 130px);background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 36px rgba(0,0,0,.3);z-index:20;display:flex;flex-direction:column;transform-origin:bottom right;transform:scale(0);opacity:0;transition:transform .28s cubic-bezier(.2,.9,.3,1),opacity .2s}
+#chat.on{transform:scale(1);opacity:1}
+#chat .top{background:var(--navy);color:#fff;padding:10px 14px;border-radius:16px 16px 0 0;font-weight:600}
+#msgs{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:8px 11px;border-radius:12px}.m.b{background:var(--bg);align-self:flex-start}.m.u{background:var(--blu);color:#fff;align-self:flex-end}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px 6px}.chips button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:99px;padding:4px 10px;font-size:12px}
+.in{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line)}.in input{flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.in button{background:var(--blu);color:#fff;border:0;border-radius:8px;padding:0 12px}
+#lbtn{display:none}
+.pin{cursor:pointer}
+@keyframes rz{50%{opacity:.25}}.rz{animation:rz 2s infinite}
+@media (max-width:720px){
+.kpis{grid-template-columns:repeat(2,1fr);gap:8px;padding:8px 10px 0}
+main{margin:8px 10px 10px}
+#lbtn{display:inline-block}
+#layers{left:0;right:0;top:auto;bottom:0;width:auto;border-radius:14px 14px 0 0;transform:translateY(110%);transition:transform .25s}
+#layers.on{transform:none}
+#detail{left:0;right:0;top:auto;bottom:0;width:auto;border-radius:14px 14px 0 0;max-height:60%}
+#chat{right:8px;bottom:92px}
+}
+</style>
+</head>
+<body>
+<header><h1>Red Zone &amp; Relocation Intelligence</h1><button class="hb" id="lbtn">Layers</button><button class="hb" id="lang">हिंदी</button><button class="hb" id="pbtn">Priority list</button></header>
+<section class="kpis">
+<div class="kpi"><b id="k1">4</b><span>High-risk villages</span></div>
+<div class="kpi"><b id="k2">2,840</b><span>Affected population</span></div>
+<div class="kpi"><b id="k3">3</b><span>Available shelters</span></div>
+<div class="kpi"><b id="k4">6</b><span>Active alerts</span></div>
+</section>
+<main>
+<svg id="map" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Hazard map of pilot district">
+<defs>
+<filter id="hs"><feTurbulence type="fractalNoise" baseFrequency=".008 .013" numOctaves="6" seed="4" result="n"/><feDiffuseLighting in="n" surfaceScale="10" diffuseConstant="1.15" lighting-color="#b9c9a6"><feDistantLight azimuth="315" elevation="42"/></feDiffuseLighting></filter>
+<radialGradient id="cb"><stop offset="0" stop-color="#7a4fc4" stop-opacity=".75"/><stop offset="1" stop-color="#7a4fc4" stop-opacity="0"/></radialGradient>
+<radialGradient id="rg"><stop offset="0" stop-color="#d62d2d" stop-opacity=".7"/><stop offset="1" stop-color="#ee8a1c" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="800" height="500" fill="#e1f3e3"/>
+<g fill="#eef9f0" opacity=".7"><ellipse cx="120" cy="60" rx="42" ry="18"/><ellipse cx="260" cy="120" rx="55" ry="22"/><ellipse cx="480" cy="70" rx="45" ry="20"/><ellipse cx="640" cy="230" rx="60" ry="25"/><ellipse cx="380" cy="300" rx="50" ry="20"/><ellipse cx="210" cy="390" rx="45" ry="18"/><ellipse cx="540" cy="410" rx="55" ry="22"/><ellipse cx="60" cy="250" rx="38" ry="16"/></g>
+<g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".95">
+<path d="M40 20C140 60 220 90 300 180C360 250 420 260 470 300C520 340 560 360 620 400"/>
+<path d="M300 180C220 220 160 260 140 330C120 390 130 420 140 430"/>
+<path d="M300 180C380 190 460 220 560 300C610 340 660 370 700 400"/>
+<path d="M150 90C220 130 270 160 300 180"/>
+<path d="M300 180C340 120 420 90 500 60C560 40 600 30 650 20"/>
+<path d="M620 150C600 190 580 240 560 300"/>
+<path d="M560 300C520 330 460 350 470 300"/>
+<path d="M140 330C220 350 280 370 300 380"/>
+<path d="M300 380C360 400 420 410 470 300"/>
+<path d="M470 300C480 350 490 390 500 420"/>
+<path d="M140 430C220 420 280 400 300 380"/>
+</g>
+<g font-size="10" font-weight="700" fill="#5a3d0a">
+<g transform="translate(230,58)"><rect width="26" height="16" rx="3" fill="#ffcf4d" stroke="#c99a1e"/><text x="13" y="12" text-anchor="middle">22</text></g>
+<g transform="translate(460,52)"><rect width="26" height="16" rx="3" fill="#ffcf4d" stroke="#c99a1e"/><text x="13" y="12" text-anchor="middle">27</text></g>
+<g transform="translate(556,262)"><rect width="30" height="16" rx="3" fill="#ffcf4d" stroke="#c99a1e"/><text x="15" y="12" text-anchor="middle">322</text></g>
+<g transform="translate(148,300)"><rect width="26" height="16" rx="3" fill="#ffcf4d" stroke="#c99a1e"/><text x="13" y="12" text-anchor="middle">22</text></g>
+</g>
+<g fill="none" stroke-linecap="round">
+<path id="river" d="M55 -10C68 60 38 130 28 210C18 290 58 370 42 500" stroke="#7fb8e0" stroke-width="7" opacity=".85"/>
+<path d="M700 -10C678 60 658 120 648 180" stroke="#7fb8e0" stroke-width="6" opacity=".85"/>
+<path d="M770 320C736 362 700 392 658 412" stroke="#7fb8e0" stroke-width="6" opacity=".85"/>
+</g>
+<g font-size="11" font-style="italic" fill="#3f7fae">
+<text x="6" y="150" transform="rotate(-72 6 150)">Baya River</text>
+<text x="655" y="65">Lakhandei River</text>
+<text x="598" y="335">Balaan River</text>
+</g>
+<g id="L-flood"><path d="M60 -10C90 60 45 200 90 300C130 380 40 440 60 500" fill="none" stroke="#2b7bd0" stroke-opacity=".3" stroke-width="70" stroke-linecap="round"/><path d="M650 -10C620 80 610 150 600 220" fill="none" stroke="#2b7bd0" stroke-opacity=".3" stroke-width="55" stroke-linecap="round"/></g>
+<g id="L-land" fill="#8a5a2b" fill-opacity=".5" stroke="#6b4320"><path d="M120 90L200 78L235 130L165 165L120 145Z"/><path d="M560 60L660 52L690 105L610 140L565 112Z"/><path d="M650 200L730 190L758 245L692 272Z"/></g>
+<g id="L-cloud"><circle cx="170" cy="120" r="80" fill="url(#cb)"/><circle cx="590" cy="90" r="90" fill="url(#cb)"/></g>
+<g id="L-red"></g>
+<g id="L-shel"></g>
+<path id="route" pathLength="1" d="M300 180C340 200 400 240 470 300" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="1" stroke-dashoffset="1" style="transition:stroke-dashoffset 2.2s linear" stroke-linecap="round"/>
+<circle id="bus" r="9" fill="#0B2A5B" stroke="#fff" stroke-width="2" display="none"/>
+<text id="rlabel" x="360" y="230" fill="#12213b" font-size="14" font-weight="700" stroke="#fff" stroke-width="3" paint-order="stroke" display="none">4.2 km · Road accessible</text>
+<g id="L-vil"></g>
+</svg>
+<div id="banner">Safe, accessible and well-equipped site identified</div>
+<aside class="panel" id="layers">
+<h3>Hazard layers</h3>
+<label><input type="checkbox" data-l="flood" checked><span class="dot" style="background:var(--blu)"></span>Flood</label>
+<label><input type="checkbox" data-l="land" checked><span class="dot" style="background:var(--brn)"></span>Landslide</label>
+<label><input type="checkbox" data-l="cloud" checked><span class="dot" style="background:var(--pur)"></span>Cloudburst</label>
+<label><input type="checkbox" data-l="red" checked><span class="dot" style="background:var(--red)"></span>Red zones</label>
+<label><input type="checkbox" data-l="shel" checked><span class="dot" style="background:var(--grn)"></span>Shelters</label>
+<div class="legend"><b>Risk score</b><br><i style="background:var(--grn)"></i>0-30 Low <i style="background:#e4c11d"></i>31-60 Mod<br><i style="background:var(--org)"></i>61-80 High <i style="background:var(--red)"></i>81-100 Critical</div>
+</aside>
+<aside class="panel" id="detail"></aside>
+<aside class="panel" id="plist"><h3>Relocation priority list</h3><table><thead><tr><th>Village</th><th>Score</th><th>Risk</th><th>People</th></tr></thead><tbody id="tb"></tbody></table><button class="btn alt" id="share">Share with response team</button></aside>
+</main>
+<button id="fab" aria-label="Open chat"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.2A8 8 0 1 1 21 12z"/></svg></button>
+<section id="chat" aria-label="Chat assistant">
+<div class="top">Relocation assistant</div>
+<div id="msgs"><div class="m b">Hi! Ask me about risks, shelters or relocation.</div></div>
+<div class="chips"><button>Which villages need immediate relocation?</button><button>Show Shelter B capacity</button><button>How is priority calculated?</button></div>
+<form class="in" id="cf" onsubmit="return false"><input id="ci" placeholder="Type your question" autocomplete="off"><button id="cs">Send</button></form>
+</section>
+<script>
+var VN={A:["Muzaffarpur","मुजफ्फरपुर"],C:["Darbhanga","दरभंगा"],D:["Motipur","मोतिपुर"],E:["Samastipur","समस्तीपुर"],F:["Mahua","महुआ"],G:["Lalganj","लालगंज"]};
+var SN={B:["Hajipur","हाजीपुर"],C:["Tajpur","ताजपुर"],D:["Patori","पटोरी"]};
+var V=[
+{id:"A",x:300,y:180,s:87,p:1240,e:18,c:24,d:6,h:72,sh:"C"},
+{id:"C",x:620,y:150,s:74,p:860,e:15,c:21,d:4,h:58,sh:"C"},
+{id:"D",x:150,y:90,s:58,p:430,e:12,c:19,d:3,h:41,sh:"B"},
+{id:"E",x:560,y:300,s:41,p:310,e:10,c:17,d:2,h:33,sh:"C"},
+{id:"F",x:300,y:380,s:69,p:520,e:14,c:20,d:4,h:52,sh:"B"},
+{id:"G",x:140,y:330,s:36,p:190,e:9,c:15,d:2,h:28,sh:"B"}];
+var S=[{id:"B",x:140,y:430,cap:1500,av:1320},{id:"C",x:470,y:300,cap:900,av:610},{id:"D",x:500,y:420,cap:1100,av:840}];
+var $=function(i){return document.getElementById(i)},NS="http://www.w3.org/2000/svg";
+function col(s){return s>80?"#d62d2d":s>60?"#ee8a1c":s>30?"#e4c11d":"#2e9b4f"}
+function lab(s){return s>80?"Critical":s>60?"High":s>30?"Moderate":"Low"}
+function el(t,a,p){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e}
+V.forEach(function(v){
+ if(v.s>60){var c=el("circle",{cx:v.x,cy:v.y,r:v.s>80?62:48,fill:"url(#rg)",stroke:"#d62d2d","stroke-dasharray":"5 4","class":"rz"},$("L-red"))}
+ var g=el("g",{"class":"pin",tabindex:0,role:"button","aria-label":VN[v.id][0]},$("L-vil"));
+ el("circle",{cx:v.x,cy:v.y,r:12,fill:col(v.s),stroke:"#fff","stroke-width":3},g);
+ var t=el("text",{x:v.x+16,y:v.y+5,fill:"#fff","font-size":13,"font-weight":700,stroke:"#12213b","stroke-width":3,"paint-order":"stroke"},g);t.textContent=VN[v.id][0];
+ g.onclick=function(){show(v.id)};g.onkeydown=function(e){if(e.key=="Enter")show(v.id)};
+});
+S.forEach(function(s){var g=el("g",{},$("L-shel"));
+ el("circle",{cx:s.x,cy:s.y,r:30,fill:"#2e9b4f","fill-opacity":.28,stroke:"#2e9b4f"},g);
+ el("rect",{x:s.x-10,y:s.y-10,width:20,height:20,rx:5,fill:"#2e9b4f",stroke:"#fff","stroke-width":2,"class":"pin"},g).onclick=function(){shel(s.id)};
+ var t=el("text",{x:s.x+15,y:s.y+30,fill:"#fff","font-size":13,"font-weight":700,stroke:"#12213b","stroke-width":3,"paint-order":"stroke"},g);t.textContent=SN[s.id][0];});
+document.querySelectorAll("[data-l]").forEach(function(c){c.onchange=function(){$("L-"+c.dataset.l).style.display=c.checked?"":"none"}});
+$("lbtn").onclick=function(){$("layers").classList.toggle("on")};
+$("pbtn").onclick=function(){$("plist").classList.toggle("on")};
+$("share").onclick=function(){this.textContent="Sent to response team";};
+var tb=$("tb");V.forEach(function(v){var r=document.createElement("tr");r.className="v";r.innerHTML="<td>"+v.n+"</td><td>"+v.s+"</td><td><span class='badge' style='background:"+col(v.s)+"'>"+lab(v.s)+"</span></td><td>"+v.p.toLocaleString()+"</td>";r.onclick=function(){show(v.id)};tb.appendChild(r)});
+function bars(v){return [["Elderly",v.e*3],["Children",v.c*3],["Persons with disabilities",v.d*6],["Housing vulnerability",v.h]].map(function(b){return "<div class='row'><span>"+b[0]+"</span><span>"+Math.round(b[1])+"%</span></div><div class='bar'><i data-w='"+Math.min(100,b[1])+"'></i></div>"}).join("")}
+function show(id){
+ var v=V.filter(function(x){return x.id==id})[0],d=$("detail");
+ d.innerHTML="<button class='close' aria-label='Close'>&times;</button><h3>"+v.n+"</h3><span class='badge' style='background:"+col(v.s)+"'>"+lab(v.s)+" - "+v.s+"/100</span><p style='margin:8px 0'><b>"+v.p.toLocaleString()+" people</b> in the hazard zone</p>"+bars(v)+
+ "<div class='row'><span>Priority weights</span></div><div style='font-size:12px;margin:2px 0 6px'>Hazard risk 40% - Exposure 25% - Vulnerability 20% - Accessibility 15%</div><button class='btn' id='rt'>Show relocation route</button>";
+ d.classList.add("on");d.querySelector(".close").onclick=function(){d.classList.remove("on");reset()};
+ setTimeout(function(){d.querySelectorAll("[data-w]").forEach(function(i){i.style.width=i.dataset.w+"%"})},40);
+ $("rt").onclick=function(){route(id)};$("layers").classList.remove("on");
+}
+function shel(id){var s=S.filter(function(x){return x.id==id})[0];
+ var d=$("detail");d.innerHTML="<button class='close'>&times;</button><h3>Shelter "+s.id+"</h3><span class='badge' style='background:var(--grn)'>Low risk</span><p style='margin:8px 0'>Capacity <b>"+s.cap.toLocaleString()+"</b><br>Available <b>"+s.av.toLocaleString()+"</b><br>Distance from Village A <b>"+s.km+" km</b><br>Road accessible <b>Yes</b></p><div style='color:var(--grn);font-weight:600'>&#10003; Water &nbsp;&#10003; Food &nbsp;&#10003; Medical<br>&#10003; Electricity &nbsp;&#10003; Sanitation</div>";
+ d.classList.add("on");d.querySelector(".close").onclick=function(){d.classList.remove("on")}}
+var raf;function reset(){$("route").style.transition="none";$("route").setAttribute("stroke-dashoffset",1);$("bus").setAttribute("display","none");$("rlabel").setAttribute("display","none");$("banner").style.display="none";cancelAnimationFrame(raf)}
+function route(id){reset();var r=$("route"),len=r.getTotalLength(),b=$("bus"),t0=null;
+ void r.getBoundingClientRect();r.style.transition="stroke-dashoffset 2.2s linear";r.setAttribute("stroke-dashoffset",0);
+ b.setAttribute("display","");$("rlabel").setAttribute("display","");
+ function f(t){if(!t0)t0=t;var p=Math.min(1,(t-t0)/2200),pt=r.getPointAtLength(p*len);b.setAttribute("cx",pt.x);b.setAttribute("cy",pt.y);if(p<1)raf=requestAnimationFrame(f);else $("banner").style.display="block"}
+ raf=requestAnimationFrame(f)}
+var open=false;function tog(){open=!open;$("chat").classList.toggle("on",open);if(open)$("ci").focus()}
+$("fab").onclick=tog;
+function add(t,c){var m=document.createElement("div");m.className="m "+c;m.textContent=t;$("msgs").appendChild(m);$("msgs").scrollTop=1e5;return m}
+function ans(q){q=q.toLowerCase();
+ if(/reloc|immediate|which village|urgent/.test(q)){show("A");route("A");return "Village A (1,240 people) is Critical (87/100). Recommended: Shelter B, 4.2 km away, 1,320 spots available. Village C (860 people) is next in priority."}
+ if(/shelter|capacity/.test(q)){shel("B");return "Shelter B: capacity 1,500, 1,320 available, low risk, road accessible, 4.2 km from Village A. It has water, food, medical, electricity and sanitation."}
+ if(/priority|score|weight|calculat/.test(q))return "Priority score combines Hazard risk 40%, Population exposure 25%, Vulnerability 20% and Accessibility 15%. Scores of 81-100 are Critical.";
+ if(/flood|landslide|cloud|hazard|layer/.test(q))return "Use the layer panel to toggle Flood, Landslide and Cloudburst zones. Red zones mark habitations where several hazards overlap.";
+ return "I can help with high-risk villages, shelter capacity, routes and how priority is calculated."}
+function send(q){if(!q)return;add(q,"u");$("ci").value="";var t=add("Typing...","b");setTimeout(function(){t.textContent=ans(q)},900)}
+document.querySelectorAll(".chips button").forEach(function(b){b.onclick=function(){send(b.textContent)}});
+$("cs").onclick=function(){send($("ci").value.trim())};
+$("ci").onkeydown=function(e){if(e.key=="Enter")send($("ci").value.trim())};
+</script>
+<script>
+var HI=false,D={
+ti:["Red Zone & Relocation Intelligence","रेड ज़ोन एवं पुनर्वास इंटेलिजेंस"],
+k1:["High-risk villages","उच्च जोखिम वाले गाँव"],k2:["Affected population","प्रभावित आबादी"],k3:["Available shelters","उपलब्ध आश्रय"],k4:["Active alerts","सक्रिय अलर्ट"],
+lay:["Layers","परतें"],pl:["Priority list","प्राथमिकता सूची"],hz:["Hazard layers","खतरा परतें"],
+fl:["Flood","बाढ़"],ls:["Landslide","भूस्खलन"],cb:["Cloudburst","बादल फटना"],rz:["Red zones","रेड ज़ोन"],sh:["Shelters","आश्रय"],
+lg:["Risk score","जोखिम स्कोर"],c4:["Critical","अति गंभीर"],c3:["High","उच्च"],c2:["Moderate","मध्यम"],c1:["Low","निम्न"],
+plh:["Relocation priority list","पुनर्वास प्राथमिकता सूची"],share:["Share with response team","प्रतिक्रिया दल को भेजें"],
+ct:["Relocation assistant","पुनर्वास सहायक"],hi:["Hi! Ask me about risks, shelters or relocation.","नमस्ते! जोखिम, आश्रय या पुनर्वास के बारे में पूछें।"],
+q1:["Which villages need immediate relocation?","किन गाँवों को तुरंत पुनर्वास चाहिए?"],q2:["Show Hajipur shelter capacity","आश्रय हाजीपुर की क्षमता दिखाएँ"],q3:["How is priority calculated?","प्राथमिकता कैसे तय होती है?"],
+ph:["Type your question","अपना प्रश्न लिखें"],snd:["Send","भेजें"],ty:["Thinking...","सोच रहा हूँ..."],
+ban:["Safe, accessible and well-equipped site identified","सुरक्षित, सुलभ और सुसज्जित स्थल मिला"],
+vil:["Village","गाँव"],shl:["Shelter","आश्रय"],pz:["people in the hazard zone","लोग खतरे वाले क्षेत्र में"],
+wt:["Priority weights: Hazard risk 40% · Exposure 25% · Vulnerability 20% · Accessibility 15%","प्राथमिकता भार: खतरा 40% · जोखिम में आबादी 25% · संवेदनशीलता 20% · पहुँच 15%"],
+rb:["Show relocation route","पुनर्वास मार्ग दिखाएँ"],el:["Elderly","बुज़ुर्ग"],ch:["Children","बच्चे"],di:["Persons with disabilities","दिव्यांगजन"],ho:["Housing vulnerability","आवास की संवेदनशीलता"],
+lowr:["Low risk","कम जोखिम"],cap:["Capacity","क्षमता"],av:["Available","उपलब्ध"],road:["Road accessible","सड़क से पहुँच"],yes:["Yes","हाँ"],
+svc:["&#10003; Water &nbsp;&#10003; Food &nbsp;&#10003; Medical<br>&#10003; Electricity &nbsp;&#10003; Sanitation","&#10003; पानी &nbsp;&#10003; भोजन &nbsp;&#10003; चिकित्सा<br>&#10003; बिजली &nbsp;&#10003; स्वच्छता"]};
+function t(k){return D[k][HI?1:0]}
+function vn(v){return VN[v.id][HI?1:0]}
+function sn(id){return SN[id][HI?1:0]}
+function lab(s){return t(s>80?"c4":s>60?"c3":s>30?"c2":"c1")}
+function bars(v){return [["el",v.e*3],["ch",v.c*3],["di",v.d*6],["ho",v.h]].map(function(b){return "<div class='row'><span>"+t(b[0])+"</span><span>"+Math.round(b[1])+"%</span></div><div class='bar'><i data-w='"+Math.min(100,b[1])+"'></i></div>"}).join("")}
+function show(id){var v=V.filter(function(x){return x.id==id})[0],d=$("detail");
+ d.innerHTML="<button class='close' aria-label='Close'>&times;</button><h3>"+vn(v)+"</h3><span class='badge' style='background:"+col(v.s)+"'>"+lab(v.s)+" - "+v.s+"/100</span><p style='margin:8px 0'><b>"+v.p.toLocaleString()+"</b> "+t("pz")+"</p>"+bars(v)+"<div style='font-size:12px;margin:2px 0 6px'>"+t("wt")+"</div><button class='btn' id='rt'>"+t("rb")+"</button>";
+ d.classList.add("on");d.dataset.k="v"+id;
+ d.querySelector(".close").onclick=function(){d.classList.remove("on");d.dataset.k="";reset()};
+ setTimeout(function(){d.querySelectorAll("[data-w]").forEach(function(i){i.style.width=i.dataset.w+"%"})},40);
+ $("rt").onclick=function(){route(id)};$("layers").classList.remove("on")}
+function shel(id){var s=S.filter(function(x){return x.id==id})[0],d=$("detail");
+ d.innerHTML="<button class='close'>&times;</button><h3>"+sn(id)+"</h3><span class='badge' style='background:var(--grn)'>"+t("lowr")+"</span><p style='margin:8px 0'>"+t("cap")+" <b>"+s.cap.toLocaleString()+"</b><br>"+t("av")+" <b>"+s.av.toLocaleString()+"</b><br>"+t("road")+" <b>"+t("yes")+"</b></p><div style='color:var(--grn);font-weight:600'>"+t("svc")+"</div>";
+ d.classList.add("on");d.dataset.k="s"+id;d.querySelector(".close").onclick=function(){d.classList.remove("on");d.dataset.k=""}}
+function route(id){reset();var v=V.filter(function(x){return x.id==id})[0],s=S.filter(function(x){return x.id==v.sh})[0],r=$("route"),b=$("bus"),l=$("rlabel"),mx=(v.x+s.x)/2,my=(v.y+s.y)/2-30;
+ r.setAttribute("d","M"+v.x+" "+v.y+"Q"+mx+" "+my+" "+s.x+" "+s.y);
+ l.textContent=(Math.hypot(s.x-v.x,s.y-v.y)*.0213).toFixed(1)+" km · "+t("road");l.setAttribute("x",mx-40);l.setAttribute("y",my-8);
+ var len=r.getTotalLength(),t0=null;void r.getBoundingClientRect();
+ r.style.transition="stroke-dashoffset 2.2s linear";r.setAttribute("stroke-dashoffset",0);b.setAttribute("display","");l.setAttribute("display","");
+ function f(ts){if(!t0)t0=ts;var p=Math.min(1,(ts-t0)/2200),pt=r.getPointAtLength(p*len);b.setAttribute("cx",pt.x);b.setAttribute("cy",pt.y);if(p<1)raf=requestAnimationFrame(f);else{$("banner").textContent=t("ban");$("banner").style.display="block"}}
+ raf=requestAnimationFrame(f)}
+function tbl(){tb.innerHTML="";V.slice().sort(function(a,b){return b.s-a.s}).forEach(function(v){var r=document.createElement("tr");r.className="v";r.innerHTML="<td>"+vn(v)+"</td><td>"+v.s+"</td><td><span class='badge' style='background:"+col(v.s)+"'>"+lab(v.s)+"</span></td><td>"+v.p.toLocaleString()+"</td>";r.onclick=function(){show(v.id)};tb.appendChild(r)})}
+var R1=/reloc|immediate|urgent|which village|पुनर्वास|तुरंत|किन गाँव/,R2=/shelter|capacity|आश्रय|क्षमता/,R3=/priority|score|weight|calculat|प्राथमिकता/,R4=/flood|landslide|cloud|hazard|layer|बाढ़|भूस्खलन|बादल/;
+function topV(){return V.slice().sort(function(a,b){return b.s-a.s})}
+function kmTo(v,s){return (Math.hypot(s.x-v.x,s.y-v.y)*.0213).toFixed(1)}
+function local(q){q=q.toLowerCase();var top=topV();if(R1.test(q)){show(top[0].id);route(top[0].id)}else if(R2.test(q))shel(S[0].id)}
+function ans(q){q=q.toLowerCase();var top=topV(),v1=top[0],v2=top[1],s1=S.filter(function(x){return x.id==v1.sh})[0],km=kmTo(v1,s1);
+ if(R1.test(q))return HI?vn(v1)+" ("+v1.p.toLocaleString()+" लोग) "+lab(v1.s)+" है ("+v1.s+"/100)। सुझाव: "+sn(s1.id)+", "+km+" किमी दूर, "+s1.av.toLocaleString()+" स्थान उपलब्ध। "+vn(v2)+" ("+v2.p.toLocaleString()+" लोग) अगली प्राथमिकता है।":vn(v1)+" ("+v1.p.toLocaleString()+" people) is "+lab(v1.s)+" ("+v1.s+"/100). Recommended: "+sn(s1.id)+", "+km+" km away, "+s1.av.toLocaleString()+" spots available. "+vn(v2)+" ("+v2.p.toLocaleString()+" people) is next in priority.";
+ if(R2.test(q)){var s0=S[0],nearV=V.filter(function(x){return x.sh==s0.id})[0]||v1;return HI?sn(s0.id)+": क्षमता "+s0.cap.toLocaleString()+", "+s0.av.toLocaleString()+" उपलब्ध, कम जोखिम, सड़क से पहुँच, "+vn(nearV)+" से "+kmTo(nearV,s0)+" किमी। पानी, भोजन, चिकित्सा, बिजली और स्वच्छता उपलब्ध है।":sn(s0.id)+": capacity "+s0.cap.toLocaleString()+", "+s0.av.toLocaleString()+" available, low risk, road accessible, "+kmTo(nearV,s0)+" km from "+vn(nearV)+". It has water, food, medical, electricity and sanitation."}
+ if(R3.test(q))return HI?"प्राथमिकता स्कोर = खतरा 40%, जोखिम में आबादी 25%, संवेदनशीलता 20%, पहुँच 15%। 81-100 अति गंभीर है।":"Priority score combines Hazard risk 40%, Population exposure 25%, Vulnerability 20% and Accessibility 15%. Scores of 81-100 are Critical.";
+ if(R4.test(q))return HI?"बाईं ओर के पैनल से बाढ़, भूस्खलन और बादल फटने की परतें चालू/बंद करें। रेड ज़ोन वहाँ हैं जहाँ कई खतरे मिलते हैं।":"Use the layer panel to toggle Flood, Landslide and Cloudburst zones. Red zones mark habitations where several hazards overlap.";
+ return HI?"मैं उच्च जोखिम वाले गाँव, आश्रय क्षमता, मार्ग और प्राथमिकता के बारे में मदद कर सकता हूँ।":"I can help with high-risk villages, shelter capacity, routes and how priority is calculated."}
+async function send(q){if(!q)return;add(q,"u");$("ci").value="";local(q);var m=add(t("ty"),"b"),sm=null;
+ try{sm=window.claude&&await claude.use("sample")}catch(e){}
+ if(!sm){setTimeout(function(){m.textContent=ans(q)},800);return}
+ var data={villages:V.map(function(v){var s=S.filter(function(x){return x.id==v.sh})[0];return{name:vn(v),score:v.s,risk:D[v.s>80?"c4":v.s>60?"c3":v.s>30?"c2":"c1"][0],people:v.p,nearest_shelter:sn(v.sh),distance_km:kmTo(v,s)}}),shelters:S.map(function(s){return{name:sn(s.id),capacity:s.cap,available:s.av}}),weights:"hazard 40, exposure 25, vulnerability 20, accessibility 15",region:"pilot district in North Bihar (Muzaffarpur, Darbhanga, Samastipur area)"};
+ try{await sm("You are the assistant inside a disaster-management dashboard for a pilot district. Answer in 1-3 short sentences in "+(HI?"Hindi":"English")+". Use only this sample data; if it does not cover the question, say so. Data: "+JSON.stringify(data)+"\nQuestion: "+q,{modelTier:"quick",cache:false,onText:function(r){m.textContent=r.text;$("msgs").scrollTop=1e5}})}
+ catch(e){m.textContent=ans(q)}}
+function applyLang(){var q=function(s,k){document.querySelector(s).textContent=t(k)};
+ q("h1","ti");document.title=t("ti");
+ document.querySelectorAll(".kpi span").forEach(function(e,i){e.textContent=t("k"+(i+1))});
+ var hi=V.filter(function(v){return v.s>60});$("k1").textContent=hi.length;$("k2").textContent=hi.reduce(function(a,v){return a+v.p},0).toLocaleString();$("k3").textContent=S.length;
+ q("#lbtn","lay");q("#pbtn","pl");q("#layers h3","hz");q("#plist h3","plh");q("#share","share");q(".top","ct");q("#cs","snd");
+ $("lang").textContent=HI?"English":"हिंदी";
+ document.querySelectorAll("#layers label").forEach(function(e,i){e.lastChild.nodeValue=t(["fl","ls","cb","rz","sh"][i])});
+ document.querySelector(".legend").innerHTML="<b>"+t("lg")+"</b><br><i style='background:var(--grn)'></i>0-30 "+t("c1")+" <i style='background:#e4c11d'></i>31-60 "+t("c2")+"<br><i style='background:var(--org)'></i>61-80 "+t("c3")+" <i style='background:var(--red)'></i>81-100 "+t("c4");
+ var th=HI?["गाँव","स्कोर","जोखिम","लोग"]:["Village","Score","Risk","People"];document.querySelectorAll("th").forEach(function(e,i){e.textContent=th[i]});
+ $("msgs").firstChild.textContent=t("hi");$("ci").placeholder=t("ph");
+ document.querySelectorAll(".chips button").forEach(function(e,i){e.textContent=t("q"+(i+1))});
+ document.querySelectorAll("#L-vil text").forEach(function(e,i){e.textContent=vn(V[i])});
+ document.querySelectorAll("#L-shel text").forEach(function(e,i){e.textContent=sn(S[i].id)});
+ $("banner").textContent=t("ban");tbl();
+ var k=$("detail").dataset.k;if(k&&$("detail").classList.contains("on")){k[0]=="v"?show(k.slice(1)):shel(k.slice(1))}}
+$("lang").onclick=function(){HI=!HI;applyLang()};
+applyLang();
+</script>
+</body>
+</html>
